@@ -1,0 +1,45 @@
+name: Test and publish DJI Spark Battery Recovery
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: dji-spark-battery-recovery-pages
+  cancel-in-progress: false
+
+jobs:
+  test-and-publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
+      - name: Assemble standalone recovery site
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          mkdir -p _site/downloads
+          cp -R site/. _site/
+          chmod +x site/helper/*.command
+          (cd site/helper && zip -q -9 "../../_site/downloads/DJI-Spark-Recovery-Mac.zip" *.command)
+          rm -rf _site/helper
+          touch _site/.nojekyll
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - name: Deploy standalone recovery site
+        id: deployment
+        uses: actions/deploy-pages@v4

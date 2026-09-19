@@ -21,15 +21,17 @@ test('standalone page is unbranded and documents the exact five-wire map', () =>
   assert.match(read('site/assets/spark-wiring.svg'), /NO WIRE/);
 });
 
-test('V7 engine accepts severely discharged but nonzero cells and keeps BMS guards', () => {
+test('V8 engine accepts severely discharged but nonzero cells and keeps BMS guards', () => {
   const engine = read('site/helper/recovery-engine.command');
-  assert.match(engine, /Recovery V7/);
+  assert.match(engine, /Recovery V8/);
   assert.match(engine, /pack_mv < 5400/);
   assert.match(engine, /min\(cells\) < 1800/);
   assert.match(engine, /cell_spread > 300/);
   assert.match(engine, /safety_before & 1/);
   assert.match(engine, /command\("WW 00 0029"\)/);
   assert.match(engine, /command\("WW 00 0030"\)/);
+  assert.match(engine, /BUSRESET/);
+  assert.match(engine, /for attempt in range\(5\)/);
 });
 
 test('helper reuses the open page through an origin-restricted loopback bootstrap', () => {
@@ -41,4 +43,14 @@ test('helper reuses the open page through an origin-restricted loopback bootstra
   assert.doesNotMatch(helper, /open "\$PAGE"/);
   assert.match(app, /fetch\(`\$\{endpoint\}\/bootstrap`/);
   assert.match(app, /confirmation\.checked/);
+});
+
+test('complete recovery output can be exported as a timestamped text log', () => {
+  const html = read('site/index.html');
+  const app = read('site/app.js');
+  const helper = read('site/helper/DJI-Spark-Recovery-Mac.command');
+  assert.match(html, /id="exportLogButton"[\s\S]*Export complete output log/);
+  assert.match(app, /new Blob\(\[completeLog\]/);
+  assert.match(app, /DJI_Spark_Recovery_\$\{stamp\}\.txt/);
+  assert.doesNotMatch(helper, /250_000/);
 });

@@ -9,7 +9,7 @@ LOG="$OUTDIR/DJI_Spark_SMBus_Recovery_${STAMP}.txt"
 exec > >(tee "$LOG") 2>&1
 
 echo "============================================================"
-echo "DJI Spark + Arduino Nano Matter SMBus Recovery V7"
+echo "DJI Spark + Arduino Nano Matter SMBus Recovery V8"
 echo "Started: $(date)"
 echo "The diagnostic phase is read-only. PF reset is separately confirmed."
 echo "============================================================"
@@ -66,12 +66,27 @@ bool writeBytes(const uint8_t *data, size_t length) {
   return Wire.endTransmission() == 0;
 }
 
+void resetBus() {
+  Wire.end();
+  delay(25);
+  Wire.begin();
+  Wire.setClock(100000);
+  delay(75);
+}
+
 void readRaw(uint8_t reg, uint8_t wanted) {
-  Wire.beginTransmission(BATTERY_ADDRESS);
-  Wire.write(reg);
-  if (Wire.endTransmission(false) != 0) { Serial.println("ERR I2C_WRITE"); return; }
-  delay(3);
-  uint8_t received = Wire.requestFrom((int)BATTERY_ADDRESS, (int)wanted);
+  uint8_t received = 0;
+  for (uint8_t attempt = 0; attempt < 3; ++attempt) {
+    Wire.beginTransmission(BATTERY_ADDRESS);
+    Wire.write(reg);
+    if (Wire.endTransmission(false) == 0) {
+      delay(5);
+      received = Wire.requestFrom((int)BATTERY_ADDRESS, (int)wanted);
+      if (received) break;
+    }
+    resetBus();
+  }
+  if (!received) { Serial.println("ERR I2C_READ"); return; }
   Serial.print("OK ");
   Serial.print(received);
   for (uint8_t i = 0; i < received && Wire.available(); ++i) {
@@ -82,6 +97,7 @@ void readRaw(uint8_t reg, uint8_t wanted) {
 
 void processLine(char *line) {
   if (!strcmp(line, "PING")) { Serial.println("OK PONG"); return; }
+  if (!strcmp(line, "BUSRESET")) { resetBus(); Serial.println("OK RESET"); return; }
 
   unsigned reg = 0, value = 0, wanted = 0;
   if (sscanf(line, "RW %x", &reg) == 1) { readRaw((uint8_t)reg, 2); return; }
@@ -120,7 +136,7 @@ void setup() {
   Wire.begin();                  // Nano Matter SDA=A4, SCL=A5
   Wire.setClock(100000);
   delay(500);
-  Serial.println("READY SparkSMBusBridgeV7");
+  Serial.println("READY SparkSMBusBridgeV8");
 }
 
 void loop() {
@@ -177,13 +193,32 @@ def command(text, timeout=3.0):
         raise RuntimeError(f"{text}: {answer}")
     return answer
 
-def raw(command_text, wanted):
-    fields = command(command_text).split()
-    count = int(fields[1])
-    data = bytes(int(x, 16) for x in fields[2:])
-    if count != len(data) or len(data) < wanted:
-        raise RuntimeError(f"short SMBus reply to {command_text}: {data.hex()}")
-    return data
+def reset_bus():
+    """Reinitialize the Nano I2C peripheral after a battery NACK."""
+    try:
+        command("BUSRESET", 4.0)
+    finally:
+        time.sleep(0.40)
+
+def raw(command_text, wanted, attempts=4):
+    errors = []
+    for attempt in range(attempts):
+        try:
+            fields = command(command_text).split()
+            count = int(fields[1])
+            data = bytes(int(x, 16) for x in fields[2:])
+            if count != len(data) or len(data) < wanted:
+                raise RuntimeError(f"short reply: {data.hex()}")
+            return data
+        except Exception as exc:
+            errors.append(f"attempt {attempt + 1}: {exc}")
+            if attempt + 1 < attempts:
+                try:
+                    reset_bus()
+                except Exception as reset_exc:
+                    errors.append(f"bus reset: {reset_exc}")
+                time.sleep(0.60 + attempt * 0.25)
+    raise RuntimeError(f"{command_text} failed after {attempts} attempts: " + "; ".join(errors))
 
 def word(reg):
     data = raw(f"RW {reg:02X}", 2)
@@ -207,27 +242,38 @@ def status_u32(subcmd, direct_reg, name):
     commands at 0x51..0x54, which are retained as a guarded fallback.
     """
     errors = []
-    for attempt in range(3):
+    for attempt in range(5):
         try:
             command(f"WW 00 {subcmd:04X}")
-            time.sleep(0.20)
+            time.sleep(0.45)
             data = block(0x23)
             if len(data) >= 6 and int.from_bytes(data[:2], "little") == subcmd:
                 data = data[2:]
             if len(data) != 4:
                 raise RuntimeError(f"{name} returned {len(data)} bytes via ManufacturerData")
-            return int.from_bytes(data, "little")
+            value = int.from_bytes(data, "little")
+            time.sleep(0.30)
+            return value
         except Exception as exc:
             errors.append(f"MAC attempt {attempt + 1}: {exc}")
-            time.sleep(0.25)
+            try:
+                reset_bus()
+            except Exception as reset_exc:
+                errors.append(f"bus reset: {reset_exc}")
+            time.sleep(0.75 + attempt * 0.25)
     try:
+        reset_bus()
         data = block(direct_reg)
         if len(data) != 4:
             raise RuntimeError(f"{name} returned {len(data)} bytes directly")
         return int.from_bytes(data, "little")
     except Exception as exc:
         errors.append(f"direct: {exc}")
-    raise RuntimeError(f"cannot read {name}: " + "; ".join(errors))
+    raise RuntimeError(
+        f"cannot read {name} after bus recovery: " + "; ".join(errors) +
+        ". Check that Nano GND and 9 V negative both remain firmly on Spark contact 2, "
+        "then rerun recovery with the 9 V wake battery connected. PF reset was not sent."
+    )
 
 def security_name(operation_status):
     mode = (operation_status >> 8) & 0x3

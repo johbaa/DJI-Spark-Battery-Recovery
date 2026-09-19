@@ -5,6 +5,7 @@ const helperState = byId('helperState');
 const confirmation = byId('wiringConfirmed');
 const runButton = byId('runButton');
 const output = byId('recoveryOutput');
+const exportLogButton = byId('exportLogButton');
 const runState = byId('runState');
 const result = byId('resultBanner');
 const afterSuccess = byId('afterSuccess');
@@ -54,6 +55,7 @@ function render(state) {
     output.textContent = 'Helper connected. Confirm the wiring, then start recovery.';
   }
   runState.textContent = state.running ? 'Running' : state.finished ? (state.exitCode === 0 ? 'Finished' : 'Stopped') : 'Ready';
+  exportLogButton.disabled = !state.output;
   afterSuccess.hidden = true;
   if (state.finished) {
     const verified = state.exitCode === 0 && /PASS: PFStatus cleared to zero and the gauge was resealed\./.test(state.output);
@@ -110,6 +112,21 @@ runButton.addEventListener('click', async () => {
     showResult('failure', `Could not start recovery: ${error.message}`);
     await poll();
   }
+});
+
+exportLogButton.addEventListener('click', () => {
+  const completeLog = latest?.output || '';
+  if (!completeLog) return;
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const blob = new Blob([completeLog], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `DJI_Spark_Recovery_${stamp}.txt`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 });
 
 poll();

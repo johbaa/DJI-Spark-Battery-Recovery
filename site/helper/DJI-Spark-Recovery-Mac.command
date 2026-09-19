@@ -35,8 +35,6 @@ state = {"running": False, "finished": False, "exitCode": None, "output": ""}
 def append(text):
     with lock:
         state["output"] += text
-        if len(state["output"]) > 250_000:
-            state["output"] = state["output"][-250_000:]
 
 def recover():
     env = os.environ.copy()

@@ -76,6 +76,9 @@ body::before {
 .run-button:disabled { cursor: not-allowed; background: #21384c; color: #7890a4; box-shadow: none; }
 .terminal-head { display: flex; justify-content: space-between; margin-top: 20px; padding: 10px 14px; border: 1px solid #1a3c58; border-bottom: 0; border-radius: 12px 12px 0 0; background: #0a2035; color: #7fa4bf; font-size: 11px; text-transform: uppercase; letter-spacing: 1.1px; font-weight: 800; }
 .recovery-output { min-height: 250px; max-height: 460px; margin: 0; padding: 17px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; border: 1px solid #1a3c58; border-radius: 0 0 12px 12px; background: #030c15; color: #b9d4e7; font: 12px/1.55 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; }
+.export-button { width: 100%; min-height: 46px; margin-top: 12px; border: 1px solid #2d658e; border-radius: 11px; background: #0b2943; color: #c9e7fb; font: inherit; font-size: 13px; font-weight: 850; cursor: pointer; }
+.export-button:hover:not(:disabled) { background: #103653; border-color: #4196d3; }
+.export-button:disabled { cursor: not-allowed; opacity: .42; }
 .result-banner, .after-success { margin-top: 16px; padding: 15px; border-radius: 12px; font-size: 13px; line-height: 1.5; }
 .result-banner.success, .after-success { border: 1px solid rgba(54,217,155,.4); background: rgba(54,217,155,.1); color: #9af0ce; }
 .result-banner.failure { border: 1px solid rgba(255,111,88,.45); background: rgba(255,80,55,.1); color: #ffb4a6; }

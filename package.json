@@ -1,6 +1,6 @@
 {
   "name": "dji-spark-battery-recovery",
-  "version": "7.0.0",
+  "version": "8.0.0",
   "private": true,
   "description": "Standalone DJI Spark battery BMS recovery page and Mac helper",
   "scripts": {

@@ -9,7 +9,7 @@ LOG="$OUTDIR/DJI_Spark_SMBus_Recovery_${STAMP}.txt"
 exec > >(tee "$LOG") 2>&1
 
 echo "============================================================"
-echo "DJI Spark + Arduino Nano Matter SMBus Recovery V8"
+echo "DJI Spark + Arduino Nano Matter SMBus Recovery V9"
 echo "Started: $(date)"
 echo "The diagnostic phase is read-only. PF reset is separately confirmed."
 echo "============================================================"
@@ -136,7 +136,7 @@ void setup() {
   Wire.begin();                  // Nano Matter SDA=A4, SCL=A5
   Wire.setClock(100000);
   delay(500);
-  Serial.println("READY SparkSMBusBridgeV8");
+  Serial.println("READY SparkSMBusBridgeV9");
 }
 
 void loop() {
@@ -245,14 +245,14 @@ def status_u32(subcmd, direct_reg, name):
     for attempt in range(5):
         try:
             command(f"WW 00 {subcmd:04X}")
-            time.sleep(0.45)
+            time.sleep(0.30)
             data = block(0x23)
             if len(data) >= 6 and int.from_bytes(data[:2], "little") == subcmd:
                 data = data[2:]
             if len(data) != 4:
                 raise RuntimeError(f"{name} returned {len(data)} bytes via ManufacturerData")
             value = int.from_bytes(data, "little")
-            time.sleep(0.30)
+            time.sleep(0.05)
             return value
         except Exception as exc:
             errors.append(f"MAC attempt {attempt + 1}: {exc}")
@@ -425,12 +425,33 @@ try:
     if safety_unsealed & 1:
         raise RuntimeError("live Cell Undervoltage became active; PF reset was not sent")
 
+    # DJI016 can automatically leave Full Access after a short idle interval.
+    # The detailed status reads above can consume that interval, so verify the
+    # security state again immediately before the destructive command. If it
+    # expired, restore Full Access and proceed without another long status set.
+    operation_at_reset = status_u32(0x54, 0x54, "OperationStatus immediately before PF reset")
+    if ((operation_at_reset >> 8) & 0x3) != 1:
+        if device.strip().upper() != "DJI016":
+            raise RuntimeError("Full Access expired before PF reset; reset was not sent")
+        print("Full Access expired during verification; authenticating again.")
+        command("WW 00 7EE0")
+        command("WW 00 CCDF")
+        time.sleep(0.15)
+        command("WW 00 BF17")
+        command("WW 00 E0BC")
+        time.sleep(0.20)
+        operation_at_reset = status_u32(0x54, 0x54, "OperationStatus after immediate re-authentication")
+        if ((operation_at_reset >> 8) & 0x3) != 1:
+            raise RuntimeError("could not restore Full Access immediately before PF reset")
+    print("Reset authorization : Full Access immediately before PF reset")
     command("WW 00 0029")       # PermanentFailDataReset
     time.sleep(2.0)
-    operation_after = status_u32(0x54, 0x54, "OperationStatus after reset")
+    # Read the decisive result first, before any optional post-reset status
+    # traffic or automatic security-state transition can obscure the result.
+    pf_after = status_u32(0x53, 0x53, "PFStatus immediately after reset")
     safety_after = status_u32(0x51, 0x51, "SafetyStatus after reset")
     pf_alert_after = status_u32(0x52, 0x52, "PFAlert after reset")
-    pf_after = status_u32(0x53, 0x53, "PFStatus after reset")
+    operation_after = status_u32(0x54, 0x54, "OperationStatus after reset")
     print_status_set("Verified status after PF reset", operation_after,
                      safety_after, pf_alert_after, pf_after)
 

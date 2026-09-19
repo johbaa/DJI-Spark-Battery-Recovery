@@ -21,9 +21,9 @@ test('standalone page is unbranded and documents the exact five-wire map', () =>
   assert.match(read('site/assets/spark-wiring.svg'), /NO WIRE/);
 });
 
-test('V8 engine accepts severely discharged but nonzero cells and keeps BMS guards', () => {
+test('V9 engine accepts severely discharged but nonzero cells and keeps BMS guards', () => {
   const engine = read('site/helper/recovery-engine.command');
-  assert.match(engine, /Recovery V8/);
+  assert.match(engine, /Recovery V9/);
   assert.match(engine, /pack_mv < 5400/);
   assert.match(engine, /min\(cells\) < 1800/);
   assert.match(engine, /cell_spread > 300/);
@@ -32,6 +32,9 @@ test('V8 engine accepts severely discharged but nonzero cells and keeps BMS guar
   assert.match(engine, /command\("WW 00 0030"\)/);
   assert.match(engine, /BUSRESET/);
   assert.match(engine, /for attempt in range\(5\)/);
+  assert.match(engine, /OperationStatus immediately before PF reset/);
+  assert.match(engine, /Reset authorization : Full Access immediately before PF reset/);
+  assert.ok(engine.indexOf('PFStatus immediately after reset') < engine.indexOf('SafetyStatus after reset'));
 });
 
 test('helper reuses the open page through an origin-restricted loopback bootstrap', () => {
